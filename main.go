@@ -16,6 +16,7 @@ type apiConfig struct {
 	platform       string
 	fileserverHits atomic.Int32
 	dbQueries      *database.Queries
+	jwtSecret      string
 }
 
 func main() {
@@ -31,6 +32,10 @@ func main() {
 	if platform == "" {
 		log.Fatal("PLATFORM environment variable is required")
 	}
+	jwtSecret := os.Getenv("SECRET_KEY")
+	if jwtSecret == "" {
+		log.Fatal("SECRET_KEY environment variable is required")
+	}
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -41,6 +46,7 @@ func main() {
 		platform:       platform,
 		fileserverHits: atomic.Int32{},
 		dbQueries:      database.New(db),
+		jwtSecret:      jwtSecret,
 	}
 
 	mux := http.NewServeMux()
@@ -54,11 +60,16 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", handleReadiness)
 
 	mux.HandleFunc("POST /api/users", apiCfg.handleCreateUser)
+	mux.HandleFunc("PUT /api/users", apiCfg.handleUpdateUser)
+
 	mux.HandleFunc("POST /api/login", apiCfg.handleLogin)
+	mux.HandleFunc("POST /api/refresh", apiCfg.handleRefresh)
+	mux.HandleFunc("POST /api/revoke", apiCfg.handleRevoke)
 
 	mux.HandleFunc("POST /api/chirps", apiCfg.handleCreateChirp)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handleGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handleGetChirpByID)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handleDeleteChirp)
 
 	server := &http.Server{
 		Addr:    ":" + port,
